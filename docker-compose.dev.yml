@@ -1,0 +1,85 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: pcs-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pcs_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pcs_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-pcs_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pcs_user} -d ${POSTGRES_DB:-pcs_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    container_name: pcs-api
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pcs_user}:${POSTGRES_PASSWORD:-pcs_pass}@db:5432/${POSTGRES_DB:-pcs_db}
+      NODE_ENV: development
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages/shared:/app/packages/shared
+      - ./package.json:/app/package.json
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml
+      - ./tsconfig.base.json:/app/tsconfig.base.json
+      - ref_cache:/app/data/ref_cache
+      - uploads:/app/data/uploads
+    command: pnpm --filter @app/api dev
+
+  rec:
+    build:
+      context: .
+      dockerfile: apps/rec/Dockerfile.dev
+    container_name: pcs-rec
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/rec:/app/apps/rec
+      - ref_cache:/app/data/ref_cache
+      - uploads:/app/data/uploads
+      - venv_rec:/app/apps/rec/.venv
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.dev
+    container_name: pcs-web
+    depends_on:
+      - api
+      - rec
+    env_file: .env
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages/shared:/app/packages/shared
+      - ./package.json:/app/package.json
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml
+      - ./tsconfig.base.json:/app/tsconfig.base.json
+    command: pnpm --filter @app/web dev
+
+volumes:
+  pgdata:
+  ref_cache:
+  uploads:
+  venv_rec:

@@ -1,0 +1,156 @@
+# Betriebs-Deployment: PostgreSQL/pgvector, Erkennung, API und ein Edge-Container
+# (PWA + Caddy mit TLS). Siehe DEPLOYMENT.md.
+#
+# Starten:  docker compose --env-file .env.production up -d --build
+#
+# Die grossen Daten (Referenzbilder, Index, Uploads) liegen im Bind-Mount ./data
+# und werden NICHT in Images kopiert.
+
+name: pcs
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    <<: *restart
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pcs_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt (siehe .env.production.example)}
+      POSTGRES_DB: ${POSTGRES_DB:-pcs_db}
+      # Nur im Compose-Netz erreichbar
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    logging: *logging
+    networks: [backend]
+
+  rec:
+    build:
+      context: .
+      dockerfile: apps/rec/Dockerfile
+    <<: *restart
+    init: true
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pcs_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-pcs_db}
+      INDEX_DIR: /app/data/index
+      REF_CACHE_DIR: /app/data/ref_cache
+      UPLOADS_DIR: /app/data/uploads
+    volumes:
+      # Index und Referenzbilder; der Dienst liest sie im Betrieb nur, schreibt
+      # aber beim Aufbau des Index (build_phash/build_embeddings).
+      - ./data/index:/app/data/index
+      - ./data/ref_cache:/app/data/ref_cache:ro
+    healthcheck:
+      # Modell-Warmup dauert; deshalb grosszuegige start_period
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status==200 else 1)",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+    logging: *logging
+    networks: [backend]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args:
+        # Damit hochgeladene Fotos im Volume dem Host-Nutzer gehoeren:
+        PUID: ${PUID:-1000}
+        PGID: ${PGID:-1000}
+    <<: *restart
+    init: true
+    depends_on:
+      db:
+        condition: service_healthy
+      rec:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_PORT: "3000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pcs_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-pcs_db}
+      REC_URL: http://rec:8000
+      REF_CACHE_DIR: /app/data/ref_cache
+      UPLOADS_DIR: /app/data/uploads
+      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET fehlt (siehe .env.production.example)}
+      # Herkunft der Installation: CORS + CSRF-Pruefung der API
+      CORS_ORIGINS: https://${PCS_DOMAIN}
+      # Vertrauen in X-Forwarded-For: nur private Adressbereiche (Docker-Netz).
+      # Erfordert, dass die API ausschliesslich ueber den Proxy erreichbar ist.
+      TRUST_PROXY: ${TRUST_PROXY:-uniquelocal,loopback,linklocal}
+      MIGRATE_ON_START: "1"
+    volumes:
+      # Nur Referenzbilder (lesend) und der Upload-Ordner (schreibend).
+      # Der Index (data/index) gehoert dem Erkennungs-Service und ist fuer die
+      # API gar nicht sichtbar - so kann die API ihn nicht veraendern.
+      - ./data/ref_cache:/app/data/ref_cache:ro
+      - ./data/uploads:/app/data/uploads
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    logging: *logging
+    networks: [backend]
+
+  proxy:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    <<: *restart
+    depends_on:
+      api:
+        condition: service_healthy
+      rec:
+        condition: service_started
+    environment:
+      PCS_DOMAIN: ${PCS_DOMAIN:?PCS_DOMAIN fehlt (siehe .env.production.example)}
+      PCS_TLS_MODE: ${PCS_TLS_MODE:-internal}
+      PCS_API_UPSTREAM: api:3000
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    logging: *logging
+    networks: [backend]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  backend:

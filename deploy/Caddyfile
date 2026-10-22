@@ -1,0 +1,67 @@
+# Reverse-Proxy und TLS-Endpunkt fuer den Karten-Scanner.
+#
+#   PCS_DOMAIN        Hostname der Installation, z. B. scanner.example.org.
+#                     Fuer lokale Tests geht auch "localhost:8443".
+#   PCS_TLS_MODE      "internal"  = eigene CA von Caddy (LAN, private Namen, selbstsigniert)
+#                      dein@mail.de = Let's Encrypt/ZeroSSL (oeffentliche Domain + Ports 80/443)
+#   PCS_API_UPSTREAM  Upstream der API   (Standard: api:3000)
+#   PCS_WEB_ROOT      Verzeichnis der gebauten PWA (Standard: /srv)
+#
+# Web und API liegen hier auf **einer** Herkunft. Die API behaelt ihre Pfade
+# aus der Entwicklung, deshalb wird nur nach Pfad aufgeteilt:
+#   /cards* /scans* /collection* /auth* /health  -> API
+#   alles andere                                 -> PWA (SPA-Fallback auf index.html)
+{
+	# Kein Admin-Endpunkt im Container noetig
+	admin off
+}
+
+{$PCS_DOMAIN} {
+	# Caddy braucht hier genau ein Argument: "internal" fuer die eigene CA,
+	# eine E-Mail-Adresse fuer die ACME-Ausstellung (Let's Encrypt).
+	tls {$PCS_TLS_MODE}
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=7776000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+		# Content-Security-Policy: die PWA laedt ausschliesslich eigene Dateien.
+		# Kein 'unsafe-eval', keine externen Quellen - so kann eingeschleuster
+		# Code (z. B. ein manipuliertes Kartenbild) nichts ausfuehren.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+		# Kamera wird gebraucht (Scannen), Mikrofon/Ort/Geräte nicht.
+		Permissions-Policy "camera=(self), microphone=(), geolocation=(), usb=(), midi=(), payment=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+	}
+
+	log {
+		output stdout
+		format json
+	}
+
+	# --- API -------------------------------------------------------------
+	@api path /cards* /scans* /collection* /auth* /health
+	handle @api {
+		# Die API prueft zusaetzlich selbst (15 MB in apps/api/src/app.ts)
+		request_body {
+			max_size 20MB
+		}
+		reverse_proxy {$PCS_API_UPSTREAM:api:3000}
+	}
+
+	# --- PWA -------------------------------------------------------------
+	handle {
+		root * {$PCS_WEB_ROOT:/srv}
+		try_files {path} /index.html
+		file_server
+	}
+
+	handle_errors {
+		respond "{err.status_code} {err.status_text}"
+	}
+}

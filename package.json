@@ -1,0 +1,43 @@
+{
+  "name": "pokemon-card-scanner",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev:db": "apps/rec/.venv/bin/python scripts/dev-db.py",
+    "dev:rec": "cd apps/rec && .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000",
+    "dev:api": "cd apps/api && npx --yes tsx watch src/main.ts",
+    "dev:web": "cd apps/web && npx --yes vite --host 0.0.0.0 --port 5173",
+    "test:rec": "cd apps/rec && .venv/bin/python -m pytest tests -q",
+    "test:api": "cd apps/api && npx --yes tsx --test --test-concurrency=1 test/*.test.ts",
+    "test:web": "cd apps/web && npx --yes playwright test",
+    "sync:tcgdex": "cd apps/api && npx --yes tsx src/scripts/sync-tcgdex.ts",
+    "sync:names-en": "cd apps/api && npx --yes tsx src/scripts/sync-names-en.ts",
+    "build:phash": "cd apps/rec && .venv/bin/python -m scripts.build_phash",
+    "build:embeddings": "cd apps/rec && .venv/bin/python -m scripts.build_embeddings",
+    "evaluate": "cd apps/rec && .venv/bin/python -m scripts.evaluate --samples 300 --verbose",
+    "calibrate": "cd apps/rec && .venv/bin/python -m scripts.calibrate --samples 150",
+    "icons": "node apps/web/scripts/generate-icons.mjs",
+    "ios:assets": "node apps/web/scripts/generate-ios-assets.mjs",
+    "lighthouse": "node apps/web/scripts/lighthouse.mjs",
+    "typecheck": "cd apps/api && npx --yes tsc --noEmit -p tsconfig.json && cd ../web && npx --yes tsc --noEmit",
+    "format": "npx --yes prettier@3.4.2 --write .",
+    "dev:docker": "docker compose -f docker-compose.dev.yml up --build",
+    "dev:docker:down": "docker compose -f docker-compose.dev.yml down",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^22.10.2",
+    "eslint": "9",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.72.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

@@ -1,0 +1,19 @@
+# Nicht formatieren / nicht versionieren
+node_modules/
+dist/
+build/
+.venv/
+__pycache__/
+.pytest_cache/
+data/
+*.log
+*.npz
+playwright-report/
+test-results/
+lighthouse-report*
+# Von Werkzeugen erzeugt (drizzle-kit, pnpm)
+pnpm-lock.yaml
+apps/api/src/db/migrations/meta/
+# Xcode/Capacitor-Projekt (von Capacitor und Xcode verwaltet; .pbxproj/.plist
+# formatiert Prettier ohnehin nicht, JSON-Dateien darin wuerden nur wandern)
+apps/web/ios/

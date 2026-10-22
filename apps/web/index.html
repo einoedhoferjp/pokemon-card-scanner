@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#030712" />
+    <meta
+      name="description"
+      content="Pokémon-Sammelkarten mit der Kamera scannen, prüfen und sammeln."
+    />
+    <!-- iOS: Startbildschirm-Symbol und Vollbild (Safari kennt kein Manifest-Install) -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="PK-Scan" />
+    <!-- "black" (nicht "black-translucent"): Der Inhalt beginnt unter der
+         Statusleiste. Bei "black-translucent" läuft die Seite darunter durch und
+         die Kopfzeile verschwindet auf Geräten mit Notch hinter Uhr/Akku. Der
+         schwarze Balken passt zur dunklen Oberfläche (#030712). -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>Pokémon-Karten-Scanner</title>
+  </head>
+  <body class="bg-gray-950 text-gray-100">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

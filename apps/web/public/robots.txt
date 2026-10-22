@@ -1,0 +1,4 @@
+# Privates Projekt: Die App ist eine SPA und hat außer der Startseite keine
+# eigenen Seiten zum Indexieren. Crawler dürfen die Startseite sehen.
+User-agent: *
+Allow: /

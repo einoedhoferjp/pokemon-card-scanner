@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    /* Sichere Bereiche (Notch/Statusleiste, Home-Indikator). Im Browser und im
+       installierten PWA meist 0px, im nativen WKWebView (Capacitor) > 0px. */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --header-h: calc(3.5rem + var(--safe-top));
+  }
+
+  html,
+  body {
+    @apply bg-gray-950 text-gray-100;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    padding-bottom: var(--safe-bottom);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  /* Buttons auf Touch-Geräten nicht doppelt auslösen und nicht zoomen */
+  button,
+  input,
+  select {
+    touch-action: manipulation;
+  }
+}
+
+@layer components {
+  /* Kopfzeile: feste Höhe plus oberer sicherer Bereich (ersetzt h-14). */
+  .app-header {
+    height: var(--header-h);
+    padding-top: var(--safe-top);
+  }
+
+  /* Seiten, die genau den Platz unter der Kopfzeile füllen (Scan-Ansicht).
+     Der untere sichere Bereich wird abgezogen, weil body ihn bereits als
+     padding-bottom reserviert. */
+  .app-page-full {
+    min-height: calc(100dvh - var(--header-h) - var(--safe-bottom));
+  }
+}

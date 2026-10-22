@@ -1,0 +1,31 @@
+# Build-Kontext verkleinern: grosse und lokale Verzeichnisse bleiben draussen.
+# Wichtig: `data/` (Referenzbilder, Index, Uploads) kommt zur Laufzeit als
+# Volume, nicht ins Image.
+
+.git
+.gitignore
+**/node_modules
+node_modules
+**/.venv
+.venv
+**/__pycache__
+__pycache__
+*.pyc
+**/dist
+dist
+data
+**/*.npz
+**/*.log
+*.log
+playwright-report
+test-results
+lighthouse-report*
+.env
+.env.*
+!.env.example
+!.env.production.example
+**/.DS_Store
+# iOS-Projekt: wird nur auf dem macOS-Runner (GitHub Actions) gebaut
+apps/web/ios
+**/*.md
+!README.md

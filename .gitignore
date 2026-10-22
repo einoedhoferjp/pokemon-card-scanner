@@ -1,0 +1,42 @@
+# Geheimnisse – niemals versionieren
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Abhaengigkeiten
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Builds
+dist/
+build/
+*.tsbuildinfo
+
+# Laufzeitdaten: Referenzbilder (3,2 GB), Indizes, Uploads, Logs, DB-Dumps.
+# Hochgeladene Fotos und Scans gehoeren hierher und nirgendwo sonst hin.
+data/
+*.dump
+
+# Test- und Werkzeuggeste
+playwright-report/
+test-results/
+lighthouse-report*
+.pytest_cache/
+coverage/
+
+# iOS-Builds (IPA wird in GitHub Actions erzeugt, siehe IOS.md)
+*.ipa
+*.xcarchive
+DerivedData/
+
+# Editor / Betriebssystem
+.DS_Store
+.idea/
+.vscode/
+
+# Hinweis: .env.example und .env.production.example sind absichtlich NICHT
+# ignoriert (Vorlagen ohne Geheimnisse), .env.production schon.

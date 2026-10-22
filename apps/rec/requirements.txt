@@ -1,0 +1,18 @@
+fastapi==0.159.1
+starlette==1.9.0
+uvicorn[standard]==0.34.0
+python-multipart==0.0.32
+pillow==13.0.0
+numpy>=1.26,<2.0
+opencv-python-headless==4.10.0.84
+onnxruntime==1.20.1
+paddleocr==2.9.1
+# PaddlePaddle muss explizit dabei sein (paddleocr zieht es nicht selbst),
+# dazu setuptools fuer den pkg_resources-Import von Paddle.
+paddlepaddle==3.1.1
+setuptools
+imagehash==4.3.1
+httpx==0.28.1
+psycopg[binary]==3.2.3
+pgvector==0.3.6
+python-dotenv==1.2.4

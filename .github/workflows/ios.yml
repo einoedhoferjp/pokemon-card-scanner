@@ -1,0 +1,181 @@
+name: iOS-App (IPA)
+
+# Baut eine unsignierte .ipa fuer AltStore/Sideloading. Signiert wird erst beim
+# Installieren auf dem iPhone (AltStore mit deiner Apple-ID), deshalb braucht
+# dieser Workflow keine Zertifikate und keine Secrets.
+#
+# Start:
+#   1. Actions -> "iOS-App (IPA)" -> Run workflow
+#      - app_url: HTTPS-Adresse deiner Installation (z. B. https://scanner.example.org)
+#      - bundle_id / version: optional
+#   2. oder Tag pushen:  git tag ios-v1.0.0 && git push origin ios-v1.0.0
+#      (dann muss die Repository-Variable PCS_APP_URL gesetzt sein)
+#
+# Die .ipa haengt als Artefakt am Lauf und bei Tags zusaetzlich als Release.
+# Details: IOS.md
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: "HTTPS-Adresse der Installation (z. B. https://scanner.example.org)"
+        required: true
+        type: string
+      bundle_id:
+        description: "Bundle-ID (eindeutig; AltStore registriert sie bei deiner Apple-ID)"
+        required: false
+        default: "de.pokemonscanner.app"
+        type: string
+      version:
+        description: "Version (CFBundleShortVersionString)"
+        required: false
+        default: "1.0.0"
+        type: string
+  push:
+    tags:
+      - "ios-v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Unsignierte IPA bauen
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Quellcode holen
+        uses: actions/checkout@v4
+
+      - name: pnpm einrichten
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Node einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Server-Adresse und Bundle-ID pruefen
+        env:
+          INPUT_URL: ${{ inputs.app_url || vars.PCS_APP_URL }}
+          INPUT_BUNDLE_ID: ${{ inputs.bundle_id || 'de.pokemonscanner.app' }}
+          INPUT_VERSION: ${{ inputs.version || '1.0.0' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${INPUT_URL:-}" ]; then
+            echo "::error::Keine Server-Adresse. Trage beim Start 'app_url' ein (https://…) oder setze die Repository-Variable PCS_APP_URL."
+            exit 1
+          fi
+          case "$INPUT_URL" in
+            https://*) ;;
+            *)
+              echo "::error::Die Server-Adresse muss mit https:// beginnen (Kamera und Cookies brauchen HTTPS): $INPUT_URL"
+              exit 1
+              ;;
+          esac
+          case "$INPUT_BUNDLE_ID" in
+            *[!A-Za-z0-9.-]*|"")
+              echo "::error::Ungueltige Bundle-ID: $INPUT_BUNDLE_ID (erlaubt: Buchstaben, Ziffern, Punkt, Bindestrich)"
+              exit 1
+              ;;
+          esac
+          echo "PCS_APP_URL=$INPUT_URL" >> "$GITHUB_ENV"
+          echo "PCS_APP_ID=$INPUT_BUNDLE_ID" >> "$GITHUB_ENV"
+          echo "PCS_APP_VERSION=$INPUT_VERSION" >> "$GITHUB_ENV"
+          echo "Server: $INPUT_URL"
+          echo "Bundle-ID: $INPUT_BUNDLE_ID"
+          echo "Version: $INPUT_VERSION"
+
+      - name: Abhaengigkeiten installieren
+        run: pnpm install --frozen-lockfile
+
+      - name: Web-App bauen
+        env:
+          # In der nativen Huelle ist die Herkunft der Server selbst (server.url),
+          # die API wird also same-origin angesprochen.
+          VITE_API_URL: same-origin
+        run: pnpm --filter @app/web build
+
+      - name: iOS-Projekt synchronisieren
+        working-directory: apps/web
+        run: npx cap sync ios
+
+      - name: Icon und Startbildschirm erzeugen
+        working-directory: apps/web
+        run: node scripts/generate-ios-assets.mjs
+
+      - name: Xcode-Version protokollieren
+        run: xcodebuild -version
+
+      - name: App bauen (ohne Signatur)
+        working-directory: apps/web
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PRODUCT_BUNDLE_IDENTIFIER="$PCS_APP_ID" \
+            MARKETING_VERSION="$PCS_APP_VERSION" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            -quiet \
+            archive
+
+      - name: IPA packen
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
+          if [ ! -d "$APP" ]; then
+            echo "::error::App.app fehlt im Archiv – Build fehlgeschlagen."
+            find "$RUNNER_TEMP/App.xcarchive" -maxdepth 4 -name "*.app" -print
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          zip -qry PK-Scan.ipa Payload
+          ls -lh PK-Scan.ipa
+
+      - name: IPA als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: PK-Scan-ipa
+          path: ${{ runner.temp }}/PK-Scan.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Release anlegen (nur bei Tag)
+        if: startsWith(github.ref, 'refs/tags/ios-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          NOTES=$(printf 'Unsignierte iOS-App (.ipa) fuer AltStore.\n\nServer: %s\nBundle-ID: %s\nGebaut mit Xcode auf GitHub Actions. Installation: siehe IOS.md im Repository.' "$PCS_APP_URL" "$PCS_APP_ID")
+          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/PK-Scan.ipa" \
+            --title "PK-Scan ${GITHUB_REF_NAME#ios-}" \
+            --notes "$NOTES"
+
+      - name: Hinweis anzeigen
+        run: |
+          echo "### Fertig" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Die \`.ipa\` liegt als Artefakt **PK-Scan-ipa** an diesem Lauf:" >> "$GITHUB_STEP_SUMMARY"
+          echo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Server: \`$PCS_APP_URL\` · Bundle-ID: \`$PCS_APP_ID\` · Version: \`$PCS_APP_VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Installation auf dem iPhone: AltStore -> My Apps -> + -> die .ipa waehlen." >> "$GITHUB_STEP_SUMMARY"

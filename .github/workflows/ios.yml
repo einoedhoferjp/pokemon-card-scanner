@@ -11,7 +11,8 @@ name: iOS-App (IPA)
 #   2. oder Tag pushen:  git tag ios-v1.0.0 && git push origin ios-v1.0.0
 #      (dann muss die Repository-Variable PCS_APP_URL gesetzt sein)
 #
-# Die .ipa haengt als Artefakt am Lauf und bei Tags zusaetzlich als Release.
+# Die .ipa haengt als Artefakt am Lauf und zusaetzlich als Release
+# (Tag "ios-v<version>"), damit der Download-Link stabil bleibt.
 # Details: IOS.md
 
 on:
@@ -158,23 +159,33 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Release anlegen (nur bei Tag)
-        if: startsWith(github.ref, 'refs/tags/ios-v')
+      - name: Release bereitstellen
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          NOTES=$(printf 'Unsignierte iOS-App (.ipa) fuer AltStore.\n\nServer: %s\nBundle-ID: %s\nGebaut mit Xcode auf GitHub Actions. Installation: siehe IOS.md im Repository.' "$PCS_APP_URL" "$PCS_APP_ID")
-          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/PK-Scan.ipa" \
-            --title "PK-Scan ${GITHUB_REF_NAME#ios-}" \
-            --notes "$NOTES"
+          TAG="ios-v${PCS_APP_VERSION}"
+          FILE="$RUNNER_TEMP/PK-Scan.ipa"
+          NOTES=$(printf 'Unsignierte iOS-App (.ipa) fuer AltStore.\n\nServer: %s\nBundle-ID: %s\nVersion: %s\nGebaut mit Xcode auf GitHub Actions. Installation: siehe IOS.md im Repository.' "$PCS_APP_URL" "$PCS_APP_ID" "$PCS_APP_VERSION")
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$FILE" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "$FILE" --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "PK-Scan ${PCS_APP_VERSION}" \
+              --notes "$NOTES" \
+              || gh release upload "$TAG" "$FILE" --clobber --repo "$GITHUB_REPOSITORY"
+          fi
+          echo "Release: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG"
+          echo "Download: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG/PK-Scan.ipa"
 
       - name: Hinweis anzeigen
         run: |
           echo "### Fertig" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Die \`.ipa\` liegt als Artefakt **PK-Scan-ipa** an diesem Lauf:" >> "$GITHUB_STEP_SUMMARY"
-          echo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download (direkt, ohne ZIP): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/ios-v$PCS_APP_VERSION/PK-Scan.ipa" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Artefakt **PK-Scan-ipa** (ZIP, 30 Tage): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Server: \`$PCS_APP_URL\` · Bundle-ID: \`$PCS_APP_ID\` · Version: \`$PCS_APP_VERSION\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"

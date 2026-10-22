@@ -106,7 +106,10 @@ Web-App brauchen keinen neuen Build.
 
 1. Actions → **iOS-App (IPA)** → _Run workflow_ → `app_url` (HTTPS-Adresse der
    Installation) eintragen.
-2. Artefakt `PK-Scan-ipa` herunterladen (oder Release bei Tag `ios-v*`).
+2. Nach dem Lauf (ca. 3 Minuten) die `.ipa` direkt herunterladen:
+   `…/releases/download/ios-v<version>/PK-Scan.ipa` – zusätzlich liegt sie als
+   Artefakt `PK-Scan-ipa` am Lauf. Das Repository ist öffentlich, weil macOS-Runner
+   nur dort kostenlos sind (Details: [IOS.md](IOS.md#1-repository-zu-github)).
 3. `.ipa` per AltStore installieren, beim ersten Start der Apple-ID vertrauen.
 
 Details, Grenzen und Fehlerbehebung: [IOS.md](IOS.md).

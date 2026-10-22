@@ -15,33 +15,43 @@ GitHub Actions (macOS)  →  unsignierte .ipa  →  AltStore signiert mit deiner
 
 ## Was du brauchst
 
-| Sache                                                | Warum                                                                                            |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| GitHub-Repository mit diesem Code (privat empfohlen) | Der Build läuft auf einem macOS-Runner von GitHub.                                               |
-| iPhone mit iOS 15 oder neuer                         | Mindestversion von Capacitor 8.                                                                  |
-| AltStore + AltServer                                 | Signiert und installiert die `.ipa` mit deiner Apple-ID.                                         |
-| Apple-ID (kostenlos genügt)                          | AltStore signiert beim Installieren; freie Konten: 7 Tage, danach erneuert AltStore automatisch. |
-| Erreichbare HTTPS-Installation                       | Die App lädt die PWA vom Server – ohne Server bleibt die App leer.                               |
+| Sache                                          | Warum                                                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| GitHub-Repository mit diesem Code (öffentlich) | Der Build läuft auf einem macOS-Runner; kostenlos ist das nur bei öffentlichen Repositories.     |
+| iPhone mit iOS 15 oder neuer                   | Mindestversion von Capacitor 8.                                                                  |
+| AltStore + AltServer                           | Signiert und installiert die `.ipa` mit deiner Apple-ID.                                         |
+| Apple-ID (kostenlos genügt)                    | AltStore signiert beim Installieren; freie Konten: 7 Tage, danach erneuert AltStore automatisch. |
+| Erreichbare HTTPS-Installation                 | Die App lädt die PWA vom Server – ohne Server bleibt die App leer.                               |
 
 Die Signatur passiert **erst auf dem Gerät**. Deshalb braucht der Workflow keine
 Zertifikate, keine Secrets und kein Apple-Entwicklerkonto.
 
 ## 1. Repository zu GitHub
 
-Das Projekt ist bereits als lokales Git-Repository angelegt und committet
-(`main`), und es enthält keine Geheimnisse (`.env` und `data/` sind ignoriert).
-Ein **privates** Repository ist trotzdem die bessere Wahl: es enthält den
-Quellcode, keine Scans.
+Das Projekt liegt auf GitHub:
+[github.com/einoedhoferjp/pokemon-card-scanner](https://github.com/einoedhoferjp/pokemon-card-scanner).
+Das Repository ist **öffentlich**, weil GitHub Actions auf öffentlichen
+Repositories kostenlos ist – auch die macOS-Runner, ohne die sich kein Xcode-Build
+erzeugen lässt. Bei privaten Repositories startet GitHub den Job ohne hinterlegte
+Zahlungsmethode gar nicht erst („The job was not started because recent account
+payments have failed or your spending limit needs to be increased“).
+
+Im Repository stecken **keine Geheimnisse**: `.env`, `data/` und generierte
+Artefakte sind über `.gitignore` ausgeschlossen, in den `.env*.example`-Dateien
+stehen nur Variablennamen, in den Tests nur Platzhalter-Passwörter.
+
+Wer es privat betreiben will: Settings → **Billing** → Zahlungsmethode bzw.
+Spending-Limit hinterlegen (macOS-Minuten zählen 10-fach), danach die Sichtbarkeit
+unter Settings → General auf privat stellen. Ein eigener Fork funktioniert
+genauso:
 
 ```bash
-# Repository auf github.com anlegen (privat), dann:
-git remote add origin https://github.com/<dein-name>/<repo>.git   # oder git@github.com:...
+git remote add origin https://github.com/<dein-name>/<repo>.git
 git push -u origin main
 ```
 
-Für den Push braucht GitHub eine Anmeldung: entweder ein **Personal Access
-Token** als Passwort (Settings → Developer settings → Tokens) oder ein
-SSH-Schlüssel (`ssh-keygen`, öffentlichen Schlüssel bei GitHub hinterlegen).
+Für den Push braucht GitHub eine Anmeldung: **Personal Access Token** als Passwort
+oder SSH-Schlüssel.
 
 Der Commit stammt vom Platzhalter-Autor `PK-Scan`. Mit eigener Identität:
 
@@ -69,13 +79,24 @@ git commit --amend --reset-author --no-edit
    `PCS_APP_URL` anlegen (z. B. `https://scanner.example.org`).
 2. `git tag ios-v1.0.0 && git push origin ios-v1.0.0`
 
-Bei einem Tag landet die `.ipa` zusätzlich als **Release** unter „Releases“.
+Bei einem Tag landet die `.ipa` im Release `ios-v<version>` – genau wie bei
+einem manuellen Start.
 
 ## 3. IPA herunterladen
 
-- **Artefakt:** Actions → den Lauf öffnen → unten **Artifacts** → `PK-Scan-ipa`
-  herunterladen (ein ZIP, darin `PK-Scan.ipa`). Artefakte sind 30 Tage verfügbar.
-- **Release:** bei Tag-Builds unter **Releases** direkt als `PK-Scan.ipa`.
+Jeder Lauf legt die `.ipa` als **Release** ab (Tag `ios-v<version>`), der Link
+bleibt damit stabil:
+
+```
+https://github.com/<owner>/<repo>/releases/download/ios-v1.0.0/PK-Scan.ipa
+```
+
+Ein erneuter Lauf mit derselben Version überschreibt die Datei im Release
+(`gh release upload --clobber`), ein anderer `version`-Wert erzeugt ein neues
+Release.
+
+Zusätzlich hängt die `.ipa` als **Artefakt** `PK-Scan-ipa` am Lauf (ZIP,
+30 Tage verfügbar).
 
 Der Download funktioniert auch am iPhone (Safari) – die Datei landet dann in
 „Dateien“ → „Downloads“.
